@@ -38,6 +38,7 @@
   <param name="intersection_fraction"                         value="0.09"/>
   <param name="num_threads"                                   value="3"/>
   <param name="transform_detected_objs_to_world_frame"        value="true"/>
+  <param name="waitForServiceCall"			      value="false"/>
 
   <!-- Plane segmentation parameters -->
   <param name="plane_thickness"                               value="15.0"/>

@@ -99,6 +99,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"intersection_fraction",intersection_fraction_);
   require_param(nh,"num_threads",num_threads_);
   require_param(nh,"transform_detected_objs_to_world_frame",transform2world);
+  require_param(nh,"waitForServiceCall",waitForServiceCall);
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -120,8 +121,17 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"rel_num_of_plane_points",rel_num_of_plane_points_);
 
   // Construct subscribers and publishers
-  cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
-  pcl_cloud_sub_ = nh.subscribe("pcl_points", 1, &ObjRecInterface::pcl_cloud_cb, this);
+  if(!waitForServiceCall)
+  {
+    cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
+    pcl_cloud_sub_ = nh.subscribe("pcl_points", 1, &ObjRecInterface::pcl_cloud_cb, this);
+    ROS_INFO_STREAM("Setting up subscriber interface.");
+  }
+  else
+  {
+    searchFor_srv = nh.advertiseService("searchFor", &ObjRecInterface::searchFor_cb, this);
+    ROS_INFO_STREAM("Setting up service call interface. Waiting for service calls.");
+  }
   objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
   markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
   foreground_points_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("foreground_points",10);
@@ -130,7 +140,9 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   reconfigure_server_.setCallback(boost::bind(&ObjRecInterface::reconfigure_cb, this, _1, _2));
 
   // Start recognition thread
-  recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
+  if(!waitForServiceCall)
+    recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
+
 
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
@@ -269,6 +281,139 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   foreground_points_pub_.publish(cloud_clipped);
 }
 
+bool ObjRecInterface::searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForRequest &res)
+{
+  boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
+  pcl::fromROSMsg(req.cloud, *cloud);
+  this->pcl_cloud_cb(cloud); // run through clipping
+
+  boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud_full(new pcl::PointCloud<pcl::PointXYZRGB>);
+
+  while(!clouds_.empty()) {
+    cloud_full = clouds_.front();
+    clouds_.pop();
+  }
+
+  objrec_msgs::RecognizedObjects objects_msg = do_recognition(cloud_full);
+
+  // Publish the visualization markers
+  this->publish_markers(objects_msg);
+
+  // Publish the recognized objects
+  objects_pub_.publish(objects_msg);
+}
+
+objrec_msgs::RecognizedObjects ObjRecInterface::do_recognition(pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr const & cloud_full)
+{
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+  ROS_DEBUG_STREAM("Full cloud has "<<cloud_full->points.size());
+  pcl::VoxelGrid<pcl::PointXYZRGB> voxel_grid;
+  voxel_grid.setInputCloud(cloud_full);
+  voxel_grid.setLeafSize(downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0);
+  voxel_grid.filter(*cloud);
+
+  ROS_DEBUG_STREAM("Decimated cloud has "<<cloud->points.size());
+
+  // Fill VTK points structure and convert units
+  // ObjRec operates in mm
+  // Reset the insertion point in the new buffer
+  scene_points_->SetNumberOfPoints(cloud->points.size());
+  scene_points_->Reset();
+
+  // Require the points are inside of the clopping box
+  for (int j = 0; j < (int) cloud->points.size(); ++j) {
+    // Add point
+    scene_points_->InsertNextPoint(
+        cloud->points[j].x * 1000.0,
+        cloud->points[j].y * 1000.0,
+        cloud->points[j].z * 1000.0);
+  }
+
+  if(scene_points_->GetNumberOfPoints() == 0) {
+    ROS_WARN("No foreground points!");
+    //continue;
+    objrec_msgs::RecognizedObjects objects_msg;
+    objects_msg.header.stamp = cloud->header.stamp;
+    objects_msg.header.frame_id = transform2world ? "/world" : cloud->header.frame_id;
+    return objects_msg;
+  }
+
+  // Remove ground plane
+  vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
+  vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
+  RANSACPlaneDetector planeDetector;
+  //double plane_normal[3], plane_points[3][3];
+
+  if(use_only_points_above_plane_) {
+    ROS_INFO("ObjRec: Removing points not above plane...");
+
+    // Perform the plane detection
+    planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
+    // Check the orientation of the detected plane normal
+    if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
+      planeDetector.flipPlaneNormal();
+    }
+
+    // Get plane normal for visualization
+    //plane_normal = planeDetector.getPlaneNormal();
+    //planeDetector.getPlanePoints(plane_points[0],plane_points[1],plane_points[2]);
+
+    // Get the points above the plane (the scene) and the ones below it (background)
+    planeDetector.getPointsAbovePlane(foreground_points, background_points);
+  } else {
+    foreground_points = scene_points_;
+  }
+
+  // Detect models
+  std::list<PointSetShape*> detected_models;
+
+  ROS_INFO_STREAM("ObjRec: Attempting recognition...");
+  objrec_->doRecognition(foreground_points, success_probability_, detected_models);
+
+  ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
+  ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()
+      / (double) objrec_->getLastNumberOfCheckedHypotheses());
+
+  // Construct recognized objects message
+  objrec_msgs::RecognizedObjects objects_msg;
+  objects_msg.header.stamp = cloud->header.stamp;
+  objects_msg.header.frame_id = cloud->header.frame_id;
+
+  for(std::list<PointSetShape*>::iterator it = detected_models.begin();
+      it != detected_models.end();
+      ++it)
+  {
+    PointSetShape *detected_model = *it;
+
+    // Construct and populate a message
+    objrec_msgs::PointSetShape pss_msg;
+    pss_msg.label = detected_model->getUserData()->getLabel();
+    pss_msg.confidence = detected_model->getConfidence();
+    array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
+
+    // Transform into the world frame, if desired
+    if(transform2world)
+    {
+      objects_msg.header.frame_id = "/world";
+      geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
+      pose_stamped_in.header = cloud->header;
+      pose_stamped_in.pose = pss_msg.pose;
+
+      try {
+        listener_.transformPose("/world",pose_stamped_in,pose_stamped_out);
+        pss_msg.pose = pose_stamped_out.pose;
+      }
+      catch (tf::TransformException ex){
+        ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
+      }
+    }
+
+    objects_msg.objects.push_back(pss_msg);
+    delete *it;
+  }
+  return objects_msg;
+}
+
 void ObjRecInterface::recognize_objects() 
 {
   while(ros::ok() && !time_to_stop_) {
@@ -277,7 +422,6 @@ void ObjRecInterface::recognize_objects()
 
     // Scope for syncrhonization
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_full(new pcl::PointCloud<pcl::PointXYZRGB>());
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
     {
       // Lock the buffer mutex
       boost::mutex::scoped_lock buffer_lock(buffer_mutex_);
@@ -304,108 +448,7 @@ void ObjRecInterface::recognize_objects()
       }
     }
 
-    ROS_DEBUG_STREAM("Full cloud has "<<cloud_full->points.size());
-
-    pcl::VoxelGrid<pcl::PointXYZRGB> voxel_grid;
-    voxel_grid.setInputCloud(cloud_full);
-    voxel_grid.setLeafSize(downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0,downsample_voxel_size_/1000.0);
-    voxel_grid.filter(*cloud);
-
-    ROS_DEBUG_STREAM("Decimated cloud has "<<cloud->points.size());
-    
-    // Fill VTK points structure and convert units
-    // ObjRec operates in mm
-    // Reset the insertion point in the new buffer
-    scene_points_->SetNumberOfPoints(cloud->points.size());
-    scene_points_->Reset();
-
-    // Require the points are inside of the clopping box
-    for (int j = 0; j < (int) cloud->points.size(); ++j) {
-      // Add point
-      scene_points_->InsertNextPoint(
-          cloud->points[j].x * 1000.0,
-          cloud->points[j].y * 1000.0,
-          cloud->points[j].z * 1000.0);
-    }
-
-    if(scene_points_->GetNumberOfPoints() == 0) {
-      ROS_WARN("No foreground points!");
-      continue;
-    }
-
-    // Remove ground plane
-    vtkSmartPointer<vtkPoints> background_points(vtkPoints::New(VTK_DOUBLE));
-    vtkSmartPointer<vtkPoints> foreground_points(vtkPoints::New(VTK_DOUBLE));
-    RANSACPlaneDetector planeDetector;
-    //double plane_normal[3], plane_points[3][3];
-
-    if(use_only_points_above_plane_) {
-      ROS_INFO("ObjRec: Removing points not above plane...");
-
-      // Perform the plane detection
-      planeDetector.detectPlane(scene_points_, rel_num_of_plane_points_, plane_thickness_);
-      // Check the orientation of the detected plane normal
-      if ( planeDetector.getPlaneNormal()[2] > 0.0 ) {
-        planeDetector.flipPlaneNormal();
-      }
-
-      // Get plane normal for visualization
-      //plane_normal = planeDetector.getPlaneNormal();
-      //planeDetector.getPlanePoints(plane_points[0],plane_points[1],plane_points[2]);
-
-      // Get the points above the plane (the scene) and the ones below it (background)
-      planeDetector.getPointsAbovePlane(foreground_points, background_points);
-    } else {
-      foreground_points = scene_points_;
-    }
-
-    // Detect models
-    std::list<PointSetShape*> detected_models;
-
-    ROS_INFO_STREAM("ObjRec: Attempting recognition...");
-    objrec_->doRecognition(foreground_points, success_probability_, detected_models);
-
-    ROS_INFO("ObjRec: Seconds elapsed = %.2lf \n", objrec_->getLastOverallRecognitionTimeSec());
-    ROS_INFO("ObjRec: Seconds per hypothesis = %.6lf  \n", objrec_->getLastOverallRecognitionTimeSec()
-        / (double) objrec_->getLastNumberOfCheckedHypotheses());
-
-    // Construct recognized objects message
-    objrec_msgs::RecognizedObjects objects_msg;
-    objects_msg.header.stamp = cloud->header.stamp;
-    objects_msg.header.frame_id = cloud->header.frame_id;
-
-    for(std::list<PointSetShape*>::iterator it = detected_models.begin();
-        it != detected_models.end();
-        ++it)
-    {
-      PointSetShape *detected_model = *it;
-
-      // Construct and populate a message
-      objrec_msgs::PointSetShape pss_msg;
-      pss_msg.label = detected_model->getUserData()->getLabel();
-      pss_msg.confidence = detected_model->getConfidence();
-      array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
-
-      // Transform into the world frame, if desired
-      if(transform2world)
-      {
-        objects_msg.header.frame_id = "/world";
-        geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
-        pose_stamped_in.header = cloud->header;
-        pose_stamped_in.pose = pss_msg.pose;
-
-        try {
-          listener_.transformPose("/world",pose_stamped_in,pose_stamped_out);
-          pss_msg.pose = pose_stamped_out.pose;
-        }
-        catch (tf::TransformException ex){
-          ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
-        }
-      }
-
-      objects_msg.objects.push_back(pss_msg);
-      delete *it;
-    }
+    objrec_msgs::RecognizedObjects objects_msg = do_recognition(cloud_full);
 
     // Publish the visualization markers
     this->publish_markers(objects_msg);

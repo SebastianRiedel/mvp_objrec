@@ -26,6 +26,7 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <objrec_msgs/RecognizedObjects.h>
 #include <objrec_msgs/ObjRecConfig.h>
+#include <objrec_msgs/searchFor.h>
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 #include <tf/transform_listener.h>
@@ -45,8 +46,10 @@ namespace objrec_ros_integration {
     void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
+    bool searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForRequest &res);
     void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
     void recognize_objects();
+    objrec_msgs::RecognizedObjects do_recognition(pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr const & cloud_full);
     void publish_markers(const objrec_msgs::RecognizedObjects &msg);
 
     // ROS Structures
@@ -56,6 +59,7 @@ namespace objrec_ros_integration {
     ros::Publisher objects_pub_;
     ros::Publisher markers_pub_;
     ros::Publisher foreground_points_pub_;
+    ros::ServiceServer searchFor_srv;
     tf::TransformListener listener_;
 
     // ROS Dynamic Reconfigure
@@ -132,6 +136,9 @@ namespace objrec_ros_integration {
 
     // transform recognized object poses into world frame
     bool transform2world;
+
+    // enable service call mechanism
+    bool waitForServiceCall;
   };
 }
 
