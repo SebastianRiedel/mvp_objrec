@@ -1,0 +1,7 @@
+<launch>
+  <param name="vtk_scene_filename" value="$(find objrec_core)/ObjRecRANSAC/data/table_scene.vtk"/>
+  <param name="vtk_scene_scale_to_meter" value="0.001"/>
+
+  <node pkg="objrec_ros_integration" type="vtk_points_publisher" name="vtk_scene_publisher" output="screen">
+  </node> 
+</launch>

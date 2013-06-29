@@ -27,6 +27,12 @@ INCLUDE(${VTK_USE_FILE})
 add_executable(vtk_to_stl src/vtk_to_stl.cpp)
 target_link_libraries(vtk_to_stl vtkHybrid)
 
+add_executable(obj_to_vtk_stl src/obj_to_vtk_and_stl.cpp)
+target_link_libraries(obj_to_vtk_stl vtkHybrid)
+
+rosbuild_add_executable(vtk_points_publisher src/vtk_points_publisher.cpp)
+target_link_libraries(vtk_points_publisher vtkHybrid)
+
 rosbuild_add_library(${PROJECT_NAME} src/objrec_interface.cpp src/objrec_nodelet.cpp)
 
 rosbuild_find_ros_package(cuda)
