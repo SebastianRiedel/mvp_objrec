@@ -98,6 +98,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"normal_estimation_radius",normal_estimation_radius_);
   require_param(nh,"intersection_fraction",intersection_fraction_);
   require_param(nh,"num_threads",num_threads_);
+  require_param(nh,"transform_detected_objs_to_world_frame",transform2world);
 
 	objrec_->setVisibility(object_visibility_);
 	objrec_->setRelativeObjectSize(relative_object_size_);
@@ -371,7 +372,7 @@ void ObjRecInterface::recognize_objects()
     // Construct recognized objects message
     objrec_msgs::RecognizedObjects objects_msg;
     objects_msg.header.stamp = cloud->header.stamp;
-    objects_msg.header.frame_id = "/world";//cloud->header;
+    objects_msg.header.frame_id = cloud->header.frame_id;
 
     for(std::list<PointSetShape*>::iterator it = detected_models.begin();
         it != detected_models.end();
@@ -385,17 +386,21 @@ void ObjRecInterface::recognize_objects()
       pss_msg.confidence = detected_model->getConfidence();
       array_to_pose(detected_model->getRigidTransform(), pss_msg.pose);
 
-      // Transform into the world frame TODO: make this frame a parameter
-      geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
-      pose_stamped_in.header = cloud->header;
-      pose_stamped_in.pose = pss_msg.pose;
+      // Transform into the world frame, if desired
+      if(transform2world)
+      {
+        objects_msg.header.frame_id = "/world";
+        geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
+        pose_stamped_in.header = cloud->header;
+        pose_stamped_in.pose = pss_msg.pose;
 
-      try {
-        listener_.transformPose("/world",pose_stamped_in,pose_stamped_out);
-        pss_msg.pose = pose_stamped_out.pose;
-      }
-      catch (tf::TransformException ex){
-        ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
+        try {
+          listener_.transformPose("/world",pose_stamped_in,pose_stamped_out);
+          pss_msg.pose = pose_stamped_out.pose;
+        }
+        catch (tf::TransformException ex){
+          ROS_WARN("Not transforming recognized objects into world frame: %s",ex.what());
+        }
       }
 
       objects_msg.objects.push_back(pss_msg);
