@@ -114,7 +114,7 @@ vtkSmartPointer<vtkPolyData> decimate(vtkSmartPointer<vtkPolyData> input, double
 {
   vtkSmartPointer<vtkDecimatePro> decimate = vtkSmartPointer<vtkDecimatePro>::New();
   decimate->SetInput(input);
-  decimate->SetTargetReduction(targetReduction); //10% reduction (if there was 100 triangles, now there will be 90)
+  decimate->SetTargetReduction(targetReduction);
   decimate->SetPreserveTopology(1);
   decimate->Update();
 
@@ -143,7 +143,9 @@ int main(int argc, char *argv[])
 
   std::cout << "Input has normals: " << GetPointNormals(input) << std::endl;
   if(!GetPointNormals(input))
+  {
     std::cout << "WARNING: Input mesh, does not have normals! Resulting vtk file will not have normals." << std::endl;
+  }
 
   int maxIterations = 25;
   int curIteration = 0;
@@ -181,6 +183,10 @@ int main(int argc, char *argv[])
   writerVtk->SetInput(transformed);
   writerVtk->Update();
 
+  if(!GetPointNormals(transformed))
+  {
+      std::cout << "WARNING: Output meshes do not contain normals (likely because input file did not have normals), detection won't work!!!" << std::endl;
+  }
 
   return EXIT_SUCCESS;
 }
