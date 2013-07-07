@@ -46,7 +46,7 @@ namespace objrec_ros_integration {
     void reconfigure_cb(objrec_msgs::ObjRecConfig &config, uint32_t level);
 
     void cloud_cb(const sensor_msgs::PointCloud2ConstPtr &points_msg);
-    bool searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForRequest &res);
+    bool searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForResponse &res);
     void pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > &points_msg);
     void recognize_objects();
     objrec_msgs::RecognizedObjects do_recognition(pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr const & cloud_full);
@@ -104,6 +104,7 @@ namespace objrec_ros_integration {
     double z_distance_threshold_as_voxel_size_fraction_;
     double normal_estimation_radius_;
     double intersection_fraction_;
+    bool disable_intersection_test_;
     
     // Enable iterative closest point post-processing
     bool icp_post_processing_;

@@ -3,7 +3,7 @@
 #include <vtkFloatArray.h>
 #include <vtkDoubleArray.h>
 #include <vtkPointData.h>
-#include <vtkPLYReader.h>
+#include <vtkPolyDataReader.h>
 #include <vtkOBJReader.h>
 #include <vtkSTLWriter.h>
 #include <vtkDecimatePro.h>
@@ -122,6 +122,33 @@ vtkSmartPointer<vtkPolyData> decimate(vtkSmartPointer<vtkPolyData> input, double
   return decimated;
 }
 
+bool loadModel(std::string filename, vtkSmartPointer<vtkPolyData> &model)
+{
+  vtkSmartPointer<vtkPolyData> inputMesh = vtkSmartPointer<vtkPolyData>::New();
+  int sep = filename.find_last_of('.');
+  if(filename.substr(sep) == ".vtk")
+  {
+    vtkSmartPointer<vtkPolyDataReader> reader = vtkSmartPointer<vtkPolyDataReader>::New();
+    reader->SetFileName(filename.c_str());
+    reader->Update();
+    inputMesh = reader->GetOutput();
+  }
+  else if(filename.substr(sep) == ".obj")
+  {
+    vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
+    reader->SetFileName(filename.c_str());
+    reader->Update();
+    inputMesh = reader->GetOutput();
+  }
+  else
+  {
+    std::cerr << "Can't load model of type: " << filename.substr(sep) << std::endl;
+    return false;
+  }
+  model = inputMesh;
+  return true;
+}
+
 int main(int argc, char *argv[])
 {
   if(argc != 6)
@@ -136,10 +163,8 @@ int main(int argc, char *argv[])
   float scale = atof(argv[5]);
 
   std::cout << "Reading " << inputFileName << std::endl;
-  vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
-  reader->SetFileName(inputFileName.c_str());
-  reader->Update();
-  vtkSmartPointer<vtkPolyData> input = reader->GetOutput();
+  vtkSmartPointer<vtkPolyData> input;
+  loadModel(inputFileName, input);
 
   std::cout << "Input has normals: " << GetPointNormals(input) << std::endl;
   if(!GetPointNormals(input))
@@ -154,7 +179,7 @@ int main(int argc, char *argv[])
   while(input->GetNumberOfPoints() > maxNPoints && ++curIteration < maxIterations)
   {
     {
-    vtkSmartPointer<vtkPolyData> temp = decimate(input, 0.2);
+    vtkSmartPointer<vtkPolyData> temp = decimate(input, 0.5);
     input = temp;
     }
     std::cout << ".. " << curIteration << ": NPoints " << input->GetNumberOfPoints() << std::endl;
@@ -166,6 +191,7 @@ int main(int argc, char *argv[])
   vtkSmartPointer<vtkTransformPolyDataFilter> scaleFilter = vtkSmartPointer<vtkTransformPolyDataFilter>::New();
   scaleFilter->SetInput(input);
   scaleFilter->SetTransform(transform);
+  scaleFilter->Update();
   vtkSmartPointer<vtkPolyData> transformed = scaleFilter->GetOutput();
 
 

@@ -4,20 +4,13 @@
 OBJREC_PKG_PATH=$(shell rospack find objrec_core)
 OBJREC_LIB_PATH=$(OBJREC_PKG_PATH)/lib
 
-TARBALL_BASE_URI=https://github.com/downloads/tum-mvp/mvp_objrec
-TARBALL_VERSION=1.3
-
-OBJREC_SOURCE_DIR=ObjRecRANSAC-$(TARBALL_VERSION)
+OBJREC_SOURCE_DIR=ObjRecRANSAC
 OBJREC_BUILD_DIR=$(OBJREC_PKG_PATH)/$(OBJREC_SOURCE_DIR)/build
 
 all: cpu
 
 %.tgz: 
 	cd $(OBJREC_PKG_PATH) && wget $(TARBALL_BASE_URI)/$@
-
-$(OBJREC_SOURCE_DIR): ObjRecRANSAC-$(TARBALL_VERSION).tgz
-	cd $(OBJREC_PKG_PATH) && tar -xf $<
-	ln -s $(OBJREC_SOURCE_DIR) ObjRecRANSAC
 
 cuda: $(OBJREC_SOURCE_DIR)
 	mkdir -p $(OBJREC_BUILD_DIR)

@@ -87,8 +87,9 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   // Get construction parameters from ROS & construct object recognizer
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
+  require_param(nh,"disable_intersection_test",disable_intersection_test_);
   
-  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5));
+  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5, disable_intersection_test_));
 
   // Get post-construction parameters from ROS
   require_param(nh,"object_visibility",object_visibility_);
@@ -125,6 +126,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   {
     cloud_sub_ = nh.subscribe("points", 1, &ObjRecInterface::cloud_cb, this);
     pcl_cloud_sub_ = nh.subscribe("pcl_points", 1, &ObjRecInterface::pcl_cloud_cb, this);
+    objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
     ROS_INFO_STREAM("Setting up subscriber interface.");
   }
   else
@@ -132,7 +134,6 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
     searchFor_srv = nh.advertiseService("searchFor", &ObjRecInterface::searchFor_cb, this);
     ROS_INFO_STREAM("Setting up service call interface. Waiting for service calls.");
   }
-  objects_pub_ = nh.advertise<objrec_msgs::RecognizedObjects>("recognized_objects",20);
   markers_pub_ = nh.advertise<visualization_msgs::MarkerArray>("recognized_objects_markers",20);
   foreground_points_pub_ = nh.advertise<pcl::PointCloud<pcl::PointXYZRGB> >("foreground_points",10);
 
@@ -143,7 +144,7 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   if(!waitForServiceCall)
     recognition_thread_.reset(new boost::thread(boost::bind(&ObjRecInterface::recognize_objects, this)));
 
-
+  ROS_INFO_STREAM("Transforming detections into world frame (yes/no): " << transform2world);
   ROS_INFO_STREAM("Constructed ObjRec interface.");
 }
 
@@ -281,7 +282,7 @@ void ObjRecInterface::pcl_cloud_cb(const boost::shared_ptr<pcl::PointCloud<pcl::
   foreground_points_pub_.publish(cloud_clipped);
 }
 
-bool ObjRecInterface::searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForRequest &res)
+bool ObjRecInterface::searchFor_cb(objrec_msgs::searchForRequest &req, objrec_msgs::searchForResponse &res)
 {
   boost::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB> > cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
   pcl::fromROSMsg(req.cloud, *cloud);
@@ -295,12 +296,12 @@ bool ObjRecInterface::searchFor_cb(objrec_msgs::searchForRequest &req, objrec_ms
   }
 
   objrec_msgs::RecognizedObjects objects_msg = do_recognition(cloud_full);
+  res.objects = objects_msg;
 
   // Publish the visualization markers
   this->publish_markers(objects_msg);
 
-  // Publish the recognized objects
-  objects_pub_.publish(objects_msg);
+  return true;
 }
 
 objrec_msgs::RecognizedObjects ObjRecInterface::do_recognition(pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr const & cloud_full)
