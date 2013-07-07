@@ -88,8 +88,9 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
   require_param(nh,"disable_intersection_test",disable_intersection_test_);
+  require_param(nh,"disable_intersection_test_for_different_classes",disable_intersection_test_for_different_classes_);
   
-  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5, disable_intersection_test_));
+  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5, disable_intersection_test_, disable_intersection_test_for_different_classes_));
 
   // Get post-construction parameters from ROS
   require_param(nh,"object_visibility",object_visibility_);

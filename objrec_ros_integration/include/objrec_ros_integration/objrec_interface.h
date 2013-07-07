@@ -104,7 +104,15 @@ namespace objrec_ros_integration {
     double z_distance_threshold_as_voxel_size_fraction_;
     double normal_estimation_radius_;
     double intersection_fraction_;
+
+    // Disables intersection test completely. For a data cluster with ambigious shape,
+    // all found hypothesis are returned. This could mean multiple poses for multiple classes
+    // of objects.
     bool disable_intersection_test_;
+    // Disables intersection tests for objects of different classes. For a data cluster
+    // with ambigious shape, hypothesis within a class compete for the best fit.
+    // Competition between different classes is disabled.
+    bool disable_intersection_test_for_different_classes_;
     
     // Enable iterative closest point post-processing
     bool icp_post_processing_;
