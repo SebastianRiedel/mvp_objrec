@@ -6,6 +6,7 @@
 #include <vtkPolyDataReader.h>
 #include <vtkOBJReader.h>
 #include <vtkSTLWriter.h>
+#include <vtkPLYReader.h>
 #include <vtkDecimatePro.h>
 #include <vtkQuadricDecimation.h>
 #include <vtkPolyDataWriter.h>
@@ -136,6 +137,13 @@ bool loadModel(std::string filename, vtkSmartPointer<vtkPolyData> &model)
   else if(filename.substr(sep) == ".obj")
   {
     vtkSmartPointer<vtkOBJReader> reader = vtkSmartPointer<vtkOBJReader>::New();
+    reader->SetFileName(filename.c_str());
+    reader->Update();
+    inputMesh = reader->GetOutput();
+  }
+  else if(filename.substr(sep) == ".ply")
+  {
+    vtkSmartPointer<vtkPLYReader> reader = vtkSmartPointer<vtkPLYReader>::New();
     reader->SetFileName(filename.c_str());
     reader->Update();
     inputMesh = reader->GetOutput();
