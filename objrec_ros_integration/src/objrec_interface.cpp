@@ -160,16 +160,16 @@ void ObjRecInterface::load_models_from_rosparam()
 
   // Get the list of model param names
   XmlRpc::XmlRpcValue objrec_models_xml;
-  nh_.param("models", objrec_models_xml, objrec_models_xml);
+  nh_.param("/model_database/models", objrec_models_xml, objrec_models_xml);
 
   // Iterate through the models 
   for(int i =0; i < objrec_models_xml.size(); i++) {
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
 
     // Get the mesh uri & store it
-    require_param(nh_,"model_uris/"+model_label,model_uris_[model_label]);
+    require_param(nh_,"/model_database/model_uris/"+model_label,model_uris_[model_label]);
     // TODO: make this optional
-    require_param(nh_,"stl_uris/"+model_label,stl_uris_[model_label]);
+    require_param(nh_,"/model_database/stl_uris/"+model_label,stl_uris_[model_label]);
 
     // Add the model
     this->add_model(model_label, model_uris_[model_label]);
