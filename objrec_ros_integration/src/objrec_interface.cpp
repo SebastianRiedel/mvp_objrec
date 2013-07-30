@@ -25,6 +25,7 @@
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl_conversions/pcl_conversions.h>
 
 #include <dynamic_reconfigure/server.h>
 
@@ -334,7 +335,7 @@ objrec_msgs::RecognizedObjects ObjRecInterface::do_recognition(pcl::PointCloud<p
     ROS_WARN("No foreground points!");
     //continue;
     objrec_msgs::RecognizedObjects objects_msg;
-    objects_msg.header.stamp = cloud->header.stamp;
+    objects_msg.header.stamp.fromNSec(cloud->header.stamp * 1000); // PCLHeader.stamp is in microseconds
     objects_msg.header.frame_id = transform2world ? "/world" : cloud->header.frame_id;
     return objects_msg;
   }
@@ -377,7 +378,7 @@ objrec_msgs::RecognizedObjects ObjRecInterface::do_recognition(pcl::PointCloud<p
 
   // Construct recognized objects message
   objrec_msgs::RecognizedObjects objects_msg;
-  objects_msg.header.stamp = cloud->header.stamp;
+  objects_msg.header.stamp.fromNSec(cloud->header.stamp * 1000); // PCLHeader.stamp is in microseconds
   objects_msg.header.frame_id = cloud->header.frame_id;
 
   for(std::list<PointSetShape*>::iterator it = detected_models.begin();
@@ -397,7 +398,7 @@ objrec_msgs::RecognizedObjects ObjRecInterface::do_recognition(pcl::PointCloud<p
     {
       objects_msg.header.frame_id = "/world";
       geometry_msgs::PoseStamped pose_stamped_in, pose_stamped_out;
-      pose_stamped_in.header = cloud->header;
+      pcl_conversions::fromPCL(cloud->header, pose_stamped_in.header);
       pose_stamped_in.pose = pss_msg.pose;
 
       try {
@@ -435,10 +436,13 @@ void ObjRecInterface::recognize_objects()
         continue;
       }
 
+      ros::Time time_back, time_front;
+      time_back.fromNSec(clouds_.back()->header.stamp * 1000);
+      time_front.fromNSec(clouds_.back()->header.stamp * 1000);
       ROS_INFO_STREAM("Computing objects from "
           <<scene_points_->GetNumberOfPoints()<<" points "
-          <<"between "<<(ros::Time::now() - clouds_.back()->header.stamp)
-          <<" to "<<(ros::Time::now() - clouds_.front()->header.stamp)<<" seconds after they were acquired.");
+          <<"between "<<(ros::Time::now() - time_back)
+          <<" to "<<(ros::Time::now() - time_front)<<" seconds after they were acquired.");
 
       // Copy references to the stored clouds
       cloud_full->header = clouds_.front()->header;

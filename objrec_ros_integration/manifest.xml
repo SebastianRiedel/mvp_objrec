@@ -15,6 +15,7 @@
   <depend package="visualization_msgs"/>
   <depend package="sensor_msgs"/>
   <depend package="pcl_ros"/>
+  <depend package="pcl_conversions"/>
   <depend package="resource_retriever"/>
   <depend package="dynamic_reconfigure"/>
   <depend package="nodelet"/>
