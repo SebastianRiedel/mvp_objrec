@@ -89,8 +89,9 @@ ObjRecInterface::ObjRecInterface(ros::NodeHandle nh) :
   require_param(nh,"pair_width",pair_width_);
   require_param(nh,"voxel_size",voxel_size_);
   require_param(nh,"disable_intersection_test",disable_intersection_test_);
+  require_param(nh,"disable_intersection_test_for_different_classes",disable_intersection_test_for_different_classes_);
   
-  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5, disable_intersection_test_));
+  objrec_.reset(new ObjRecRANSAC(pair_width_, voxel_size_, 0.5, disable_intersection_test_, disable_intersection_test_for_different_classes_));
 
   // Get post-construction parameters from ROS
   require_param(nh,"object_visibility",object_visibility_);
@@ -160,16 +161,16 @@ void ObjRecInterface::load_models_from_rosparam()
 
   // Get the list of model param names
   XmlRpc::XmlRpcValue objrec_models_xml;
-  nh_.param("models", objrec_models_xml, objrec_models_xml);
+  nh_.param("/model_database/models", objrec_models_xml, objrec_models_xml);
 
   // Iterate through the models 
   for(int i =0; i < objrec_models_xml.size(); i++) {
     std::string model_label = static_cast<std::string>(objrec_models_xml[i]);
 
     // Get the mesh uri & store it
-    require_param(nh_,"model_uris/"+model_label,model_uris_[model_label]);
+    require_param(nh_,"/model_database/model_uris/"+model_label,model_uris_[model_label]);
     // TODO: make this optional
-    require_param(nh_,"stl_uris/"+model_label,stl_uris_[model_label]);
+    require_param(nh_,"/model_database/stl_uris/"+model_label,stl_uris_[model_label]);
 
     // Add the model
     this->add_model(model_label, model_uris_[model_label]);

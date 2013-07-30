@@ -14,7 +14,7 @@ all: cpu
 
 cuda: $(OBJREC_SOURCE_DIR)
 	mkdir -p $(OBJREC_BUILD_DIR)
-	cd $(OBJREC_BUILD_DIR)  && cmake .. -DUSE_CUDA:BOOL=True -DCMAKE_BUILD_TYPE=Debug && make $(ROS_PARALLEL_JOBS)
+	cd $(OBJREC_BUILD_DIR)  && cmake .. -DUSE_CUDA:BOOL=True -DCMAKE_BUILD_TYPE=RelWithDebInfo && make $(ROS_PARALLEL_JOBS)
 	mkdir -p $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/BasicTools/libBasicTools.* $(OBJREC_LIB_PATH)
 	cp $(OBJREC_BUILD_DIR)/src/BasicToolsL1/libBasicToolsL1.* $(OBJREC_LIB_PATH)
