@@ -39,6 +39,8 @@
   <param name="num_threads"                                   value="3"/>
   <param name="transform_detected_objs_to_world_frame"        value="true"/>
   <param name="waitForServiceCall"			      value="false"/>
+  <param name="disable_intersection_test"     value="false"/>
+  <param name="disable_intersection_test_for_different_classes" value="false"/>
 
   <!-- Plane segmentation parameters -->
   <param name="plane_thickness"                               value="15.0"/>
